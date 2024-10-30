@@ -2560,20 +2560,38 @@ const DefaultController = {
 
             when(batchReady)
               .then(() => {
-                // Kick off the batch request
+                // Map the batch requests to their parameters
                 const requests = batch.map(obj => {
                   const params = obj._getSaveParams();
                   params.path = getServerUrlPath() + params.path;
                   return params;
                 });
-                const body =
-                  options && options.transaction && requests.length > 1
-                    ? { requests, transaction: true }
-                    : { requests };
+
+                // Handle single request differently from batch requests
+                if (requests.length === 1) {
+                  // For single request, send it directly without batch endpoint
+                  const singleRequest = requests[0];
+                  return RESTController.request(
+                    singleRequest.method || 'POST', 
+                    singleRequest.path, 
+                    singleRequest.body, 
+                    options
+                  );
+                }
+
+                // For multiple requests, use batch endpoint
+                const body = options?.transaction && requests.length > 1
+                  ? { requests, transaction: true }
+                  : { requests };
+                
                 return RESTController.request('POST', 'batch', body, options);
               })
-              .then(batchReturned.resolve, error => {
-                batchReturned.reject(new ParseError(ParseError.INCORRECT_TYPE, error.message));
+              .then(batchReturned.resolve)
+              .catch(error => {
+                batchReturned.reject(new ParseError(
+                  ParseError.INCORRECT_TYPE, 
+                  error.message
+                ));
               });
 
             return when(batchTasks);
